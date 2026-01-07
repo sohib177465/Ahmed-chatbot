@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Store Chatbot</title>
+  <style>
+    body{font-family:system-ui, Arial; margin:0; background:#f6f6f6}
+    .wrap{max-width:900px; margin:0 auto; padding:16px}
+    .card{background:#fff; border-radius:14px; padding:16px; box-shadow:0 6px 18px rgba(0,0,0,.06)}
+    .title{font-size:20px; margin:0 0 10px}
+    #chat{height:55vh; overflow:auto; border:1px solid #eee; border-radius:12px; padding:12px; background:#fafafa}
+    .msg{margin:10px 0; line-height:1.6}
+    .you{color:#111}
+    .bot{color:#0b5}
+    .meta{font-size:12px; color:#888}
+    .row{display:flex; gap:10px; margin-top:12px}
+    input{flex:1; padding:12px; border-radius:12px; border:1px solid #ddd; font-size:16px}
+    button{padding:12px 16px; border-radius:12px; border:0; background:#111; color:#fff; cursor:pointer}
+    button:disabled{opacity:.6; cursor:not-allowed}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 class="title">💬 خدمة العملاء — متجر الأجهزة الكهربائية</h1>
+      <div class="meta">المصدر: ملف المتجر (RAG) + ذاكرة لكل جلسة</div>
+      <div id="chat"></div>
+
+      <div class="row">
+        <input id="msg" placeholder="اكتب سؤالك هنا..." autocomplete="off" />
+        <button id="send">إرسال</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Session ID ثابت للمتصفح (كل عميل له ذاكرة مختلفة)
+  const sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
+  localStorage.setItem("session_id", sessionId);
+
+  const chat = document.getElementById("chat");
+  const msg = document.getElementById("msg");
+  const send = document.getElementById("send");
+
+  function addMessage(text, who){
+    const div = document.createElement("div");
+    div.className = "msg " + (who === "you" ? "you" : "bot");
+    div.textContent = (who === "you" ? "أنت: " : "Bot: ") + text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function sendMessage(){
+    const text = msg.value.trim();
+    if(!text) return;
+
+    addMessage(text, "you");
+    msg.value = "";
+    send.disabled = true;
+
+    try{
+      const res = await fetch("/chat", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ session_id: sessionId, message: text })
+      });
+      const data = await res.json();
+      addMessage(data.reply || "حصل خطأ غير متوقع.", "bot");
+    }catch(e){
+      addMessage("تعذر الاتصال بالسيرفر. تأكد أن السيرفر شغال.", "bot");
+    }finally{
+      send.disabled = false;
+      msg.focus();
+    }
+  }
+
+  send.addEventListener("click", sendMessage);
+  msg.addEventListener("keydown", (e)=>{ if(e.key === "Enter") sendMessage(); });
+
+  addMessage("أهلًا! اسألني عن الأسعار/الشحن/الدفع/الاسترجاع.", "bot");
+</script>
+</body>
+</html>
