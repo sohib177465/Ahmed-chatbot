@@ -1,69 +1,104 @@
-# -*- coding: utf-8 -*-
-from pathlib import Path
+# rag.py
+import os
+from typing import List, Dict, Any
+
 import chromadb
 from chromadb.utils import embedding_functions
 
-DATA_PATH = Path("data") / "store_manual.txt"
+# ========= إعدادات عامة =========
+COLLECTION_NAME = "store_docs"
+PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")  # محليًا فقط (Railway غالبًا ephemeral)
 
-# Embeddings (خفيف وممتاز كبداية)
-from chromadb.utils import embedding_functions
-import os
-
+# Embedding باستخدام OpenAI (خفيف جدًا)
 openai_ef = embedding_functions.OpenAIEmbeddingFunction(
     api_key=os.getenv("OPENAI_API_KEY"),
-    model_name="text-embedding-3-small"
+    model_name="text-embedding-3-small",
+)
+
+# Chroma Client (PersistentClient محليًا - على Railway ممكن يبقى مؤقت)
+chroma_client = chromadb.PersistentClient(path=PERSIST_DIR)
+
+# Collection واحدة للمستندات
+collection = chroma_client.get_or_create_collection(
+    name=COLLECTION_NAME,
+    embedding_function=openai_ef
 )
 
 
-# Persistent (يحفظ الفهرس على الهارد) - أفضل من Client() العادي
-client = chromadb.PersistentClient(path="chroma_db")
+def _chunk_text(text: str, chunk_size: int = 900, overlap: int = 120) -> List[str]:
+    """تقسيم النص لقطع صغيرة عشان البحث يبقى أدق."""
+    text = text.replace("\r\n", "\n").strip()
+    if not text:
+        return []
 
-collection = client.get_or_create_collection(
-    name="store_docs",
-    embedding_function=embedding_function
-)
-
-
-def chunk_text(text: str, chunk_size_words: int = 220, overlap_words: int = 40):
-    """Chunk by words with overlap for better retrieval."""
-    words = text.split()
     chunks = []
-    i = 0
-    while i < len(words):
-        chunk = words[i:i + chunk_size_words]
-        chunks.append(" ".join(chunk))
-        i += max(1, chunk_size_words - overlap_words)
+    start = 0
+    n = len(text)
+    while start < n:
+        end = min(start + chunk_size, n)
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end == n:
+            break
+        start = max(0, end - overlap)
     return chunks
 
 
-def ingest_document(path: str = str(DATA_PATH)):
-    """Index the document into Chroma. Safe to run multiple times."""
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(f"Document not found: {p}")
+def ingest_document(
+    text: str,
+    doc_id: str = "store_manual",
+    metadata: Dict[str, Any] | None = None
+) -> int:
+    """
+    يدخل مستند نصي (زي دليل المتجر) إلى Chroma.
+    بيرجع عدد الـ chunks اللي اتضافت.
+    """
+    if metadata is None:
+        metadata = {}
 
-    text = p.read_text(encoding="utf-8").strip()
-    if not text:
-        raise ValueError("Document is empty.")
+    chunks = _chunk_text(text)
+    if not chunks:
+        return 0
 
-    # تنظيف الفهرس القديم ثم إعادة إدخال (عشان التحديثات)
+    ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
+    metadatas = [{**metadata, "doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))]
+
+    # مهم: لو بتعمل ingest أكتر من مرة لنفس doc_id
+    # امسح القديم الأول لتجنب تكرار
     try:
-        collection.delete(where={})
+        existing = collection.get(where={"doc_id": doc_id})
+        if existing and existing.get("ids"):
+            collection.delete(ids=existing["ids"])
     except Exception:
         pass
 
-    chunks = chunk_text(text)
-
     collection.add(
         documents=chunks,
-        ids=[f"chunk_{i}" for i in range(len(chunks))]
+        ids=ids,
+        metadatas=metadatas
     )
+    return len(chunks)
 
 
-def query_document(question: str, k: int = 3):
-    """Return top-k relevant chunks."""
+def query_document(query: str, top_k: int = 4) -> str:
+    """
+    يبحث في المستندات ويرجع أفضل سياق (context) كنص واحد.
+    """
+    query = (query or "").strip()
+    if not query:
+        return ""
+
     results = collection.query(
-        query_texts=[question],
-        n_results=k
+        query_texts=[query],
+        n_results=top_k,
+        include=["documents", "metadatas", "distances"]
     )
-    return results["documents"][0]
+
+    docs = (results.get("documents") or [[]])[0]
+    if not docs:
+        return ""
+
+    # دمج أفضل النتائج في سياق واحد
+    context = "\n\n---\n\n".join(docs)
+    return context
