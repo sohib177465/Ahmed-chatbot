@@ -6,9 +6,14 @@ from chromadb.utils import embedding_functions
 DATA_PATH = Path("data") / "store_manual.txt"
 
 # Embeddings (خفيف وممتاز كبداية)
-embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
+from chromadb.utils import embedding_functions
+import os
+
+openai_ef = embedding_functions.OpenAIEmbeddingFunction(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    model_name="text-embedding-3-small"
 )
+
 
 # Persistent (يحفظ الفهرس على الهارد) - أفضل من Client() العادي
 client = chromadb.PersistentClient(path="chroma_db")
