@@ -36,7 +36,11 @@ templates = Jinja2Templates(directory="templates")
 app = FastAPI(title="AI Store Chatbot")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # بعدين نحدد دومين Wuilt فقط
+    allow_origins=[
+        "https://aldukaan.online",
+        "https://www.aldukaan.online",
+        "https://aldukaan.online/en",
+        "https://aldukaan.online/ar",],  # بعدين نحدد دومين Wuilt فقط
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
