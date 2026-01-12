@@ -3,6 +3,8 @@ import os
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from dotenv import load_dotenv
+load_dotenv()
 
 import chromadb
 from chromadb.utils import embedding_functions
@@ -94,12 +96,39 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
 
 
 def ingest_document(
-    text: str,
+    text: str | None = None,
     doc_id: str = "store_manual",
-    metadata: Optional[Dict[str, Any]] = None,
-    chunk_size: int = 1000,
-    overlap: int = 200
+    metadata: dict | None = None
 ) -> int:
+    if metadata is None:
+        metadata = {}
+
+    # لو مفيش نص اتبعت، اقرا تلقائي من ملف الدليل
+    if text is None:
+        with open("data/store_manual.txt", "r", encoding="utf-8") as f:
+            text = f.read()
+
+    # مهم: استخدم اسم الدالة اللي عندك فعلاً
+    # لو عندك chunk_text استخدمها، لو عندك _chunk_text استخدمها
+    chunks = chunk_text(text)  # <- لو اسم الدالة عندك chunk_text
+
+    if not chunks:
+        return 0
+
+    ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
+    metadatas = [{**metadata, "doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))]
+
+    try:
+        existing = collection.get(where={"doc_id": doc_id})
+        if existing and existing.get("ids"):
+            collection.delete(ids=existing["ids"])
+    except Exception:
+        pass
+
+    collection.add(documents=chunks, ids=ids, metadatas=metadatas)
+    return len(chunks)
+
+
     """
     Ingest a text document into the Chroma collection.
 
