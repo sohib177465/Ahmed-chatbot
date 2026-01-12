@@ -60,7 +60,8 @@
     send.disabled = true;
 
     try{
-      const res = await fetch("/chat", {
+      const API_URL = "https://ahmed-chatbot-production-b48c.up.railway.app";
+      const res = await fetch(`${API_URL}/chat`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ session_id: sessionId, message: text })
