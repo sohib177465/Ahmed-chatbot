@@ -35,7 +35,6 @@
   </div>
 
 <script>
-  // Session ID ثابت للمتصفح (كل عميل له ذاكرة مختلفة)
   const sessionId = localStorage.getItem("session_id") || crypto.randomUUID();
   localStorage.setItem("session_id", sessionId);
 
@@ -50,7 +49,7 @@
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
   }
-  const API_URL = "https://ahmed-chatbot-production-b48c.up.railway.app";
+
   async function sendMessage(){
     const text = msg.value.trim();
     if(!text) return;
@@ -60,16 +59,28 @@
     send.disabled = true;
 
     try{
-      const API_URL = "https://ahmed-chatbot-production-b48c.up.railway.app";
+      // ✅ لو الصفحة مفتوحة من Railway (iframe أو مباشر) استخدم نفس الـ origin
+      const API_URL = window.location.origin;
+
       const res = await fetch(`${API_URL}/chat`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ session_id: sessionId, message: text })
       });
+
+      // ✅ لو السيرفر رجع خطأ/HTML… اعرضه بدل ما تقول “تعذر الاتصال”
+      if(!res.ok){
+        const t = await res.text();
+        addMessage(`خطأ من السيرفر (${res.status}): ${t.slice(0,200)}`, "bot");
+        return;
+      }
+
       const data = await res.json();
       addMessage(data.reply || "حصل خطأ غير متوقع.", "bot");
+
     }catch(e){
-      addMessage("تعذر الاتصال بالسيرفر. تأكد أن السيرفر شغال.", "bot");
+      addMessage("تعذر الاتصال بالسيرفر (Network).", "bot");
+      console.log(e);
     }finally{
       send.disabled = false;
       msg.focus();
