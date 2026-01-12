@@ -2,9 +2,10 @@
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from openai import OpenAI
@@ -31,7 +32,7 @@ SYSTEM_PROMPT = {
         "إجاباتك مختصرة (1-3 جمل) وتسأل سؤال توضيحي عند الحاجة."
     )
 }
-
+templates = Jinja2Templates(directory="templates")
 app = FastAPI(title="AI Store Chatbot")
 app.add_middleware(
     CORSMiddleware,
@@ -43,9 +44,11 @@ app.add_middleware(
 
 # نخدم صفحة HTML
 @app.get("/", response_class=HTMLResponse)
-def home():
-    with open("templates/index.html", "r", encoding="utf-8") as f:
-        return f.read()
+def home(request: Request):
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request}
+    )
 
 class ChatRequest(BaseModel):
     session_id: str
